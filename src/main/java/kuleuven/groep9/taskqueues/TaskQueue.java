@@ -32,7 +32,6 @@ public class TaskQueue<E extends Task<E>> extends DelayQueue<E> {
 	private E combineWhenPossible(E e) throws ClassCastException {
 		Iterator<E> it = super.iterator();
 		while(it.hasNext()) {
-			System.out.println(">> checking combinations");
 			E current = it.next();
 			if (current.canCombine(e)) {
 				it.remove();

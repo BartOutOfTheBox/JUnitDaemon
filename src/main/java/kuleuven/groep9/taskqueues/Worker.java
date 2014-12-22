@@ -24,9 +24,7 @@ public abstract class Worker<T extends Task<?>> {
 			public void run() {
 				while (working)
 					try {
-						System.out.println("going to take elm and work on it");
 						work(taskQueue.take());
-						System.out.println("Took elm and worked on it");
 					} catch (InterruptedException e) {
 						e.printStackTrace();
 					}

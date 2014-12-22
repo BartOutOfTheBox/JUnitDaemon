@@ -17,6 +17,7 @@ import java.nio.file.WatchService;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.TimeUnit;
@@ -24,13 +25,14 @@ import java.util.concurrent.TimeUnit;
 import kuleuven.groep9.Notifier;
 import kuleuven.groep9.taskqueues.Task;
 import kuleuven.groep9.taskqueues.TaskQueue;
+import kuleuven.groep9.taskqueues.Worker;
 
 public class DirectoryNotifier extends Notifier<DirectoryNotifier.Listener> {
 	
 	private final WatchService watcher;
     private final Map<WatchKey,Path> keys;
 	
-	private final long timeToCombine = 200L;
+	private final long timeToCombine;
 	private final TaskQueue<DirectoryEvent> eventQueue = new TaskQueue<DirectoryEvent>();
 
 	
@@ -62,11 +64,21 @@ public class DirectoryNotifier extends Notifier<DirectoryNotifier.Listener> {
     /**
      * Creates a WatchService and registers the given directory
      */
-    public DirectoryNotifier(Path dir) throws IOException {
+    public DirectoryNotifier(Path dir, long timeToCombine) throws IOException {
+    	this.timeToCombine = timeToCombine;
         this.watcher = FileSystems.getDefault().newWatchService();
         this.keys = new HashMap<WatchKey,Path>();
         
         registerAll(dir);
+        
+        // TODO  multiple workers?
+        new Worker<DirectoryEvent>(eventQueue) {
+
+			@Override
+			protected void work(DirectoryEvent task) {
+				task.execute();
+			}
+		}.start();
         
         Thread watching = new Thread(){
         	public void run() {
@@ -126,14 +138,16 @@ public class DirectoryNotifier extends Notifier<DirectoryNotifier.Listener> {
 
 	private void registerEvent(WatchEvent<Path> event, Path absoluteDir) {
 		DirectoryEvent e;
-		if (event.kind().equals(ENTRY_CREATE))
+		if (event.kind().equals(StandardWatchEventKinds.ENTRY_CREATE))
 			e = new FileAddedEvent(absoluteDir);
-		if (event.kind().equals(ENTRY_DELETE))
+		else if (event.kind().equals(StandardWatchEventKinds.ENTRY_DELETE))
 			e = new FileDeletedEvent(absoluteDir);
-		if (event.kind().equals(ENTRY_MODIFY))
+		else if (event.kind().equals(StandardWatchEventKinds.ENTRY_MODIFY))
 			e = new FileModifiedEvent(absoluteDir);
 		else
-			throw new IllegalArgumentException();
+			throw new IllegalArgumentException(
+					"Event type is: " + event.kind().toString() 
+					+ ". This was not expected");
 		eventQueue.add(e);
 	}
 
@@ -163,7 +177,13 @@ public class DirectoryNotifier extends Notifier<DirectoryNotifier.Listener> {
 		public boolean canCombine(DirectoryEvent other) {
 			if (other == null)
 				return false;
-			return (other.getId().equals(this.getId()));
+			if (other.getId().equals(this.getId()))
+				return true;
+			if (other.getId().startsWith(this.getId()))
+				return true;
+			if (this.getId().startsWith(other.getId()))
+				return true;
+			return false;
 		}
 
 		protected Path getId() {
@@ -173,7 +193,6 @@ public class DirectoryNotifier extends Notifier<DirectoryNotifier.Listener> {
 		@Override
 		public long getDelay(TimeUnit unit) {
 			long delay = unit.convert((getDeadline().getTime() -  (new Date()).getTime()), TimeUnit.MILLISECONDS);
-			System.out.println("The delay for this elm is " + delay);
 			return delay;
 		}
 
@@ -209,7 +228,6 @@ public class DirectoryNotifier extends Notifier<DirectoryNotifier.Listener> {
 		@Override
 		public void execute() {
 			// TODO Auto-generated method stub
-			
 		}
 		
 	}
@@ -226,15 +244,20 @@ public class DirectoryNotifier extends Notifier<DirectoryNotifier.Listener> {
 				throw new IllegalArgumentException("The two given events cannot combine.");
 			if (other instanceof NoEvent)
 				return new FileAddedEvent(getId());
-			if (other instanceof FileAddedEvent)		//TODO: check if this is a valid scenario
-				return new FileAddedEvent(getId());
+			boolean isSuperDirEvent = other.getId().startsWith(getId());
+			if (other instanceof FileAddedEvent) {
+				if (isSuperDirEvent)
+					return new FileAddedEvent(getId());
+				return new FileAddedEvent(other.getId());
+			}
 			return other.combine(this);
 		}
 
 		@Override
 		public void execute() {
-			// TODO Auto-generated method stub
-			
+			Iterator<Listener> it = getListeners();
+			while (it.hasNext())
+				it.next().fileAdded(getId());				
 		}
 		
 	}
@@ -251,22 +274,35 @@ public class DirectoryNotifier extends Notifier<DirectoryNotifier.Listener> {
 				throw new IllegalArgumentException("The two given events cannot combine.");
 			if (other instanceof NoEvent)
 				return new FileDeletedEvent(getId());
+			boolean isSuperDirEvent = other.getId().startsWith(getId());
 			if (other instanceof FileAddedEvent) {
 				// Determine which event was first
-				if (this.getEventTime().before(other.getEventTime()))
+				if (this.getEventTime().before(other.getEventTime())) {
 					//delete was first;
+					// TODO return FileModifiedevent instead?
+					if (isSuperDirEvent)
+						return new FileAddedEvent(other.getId());
 					return new FileAddedEvent(getId());
+				}
 				//added and then deleted again
-				return new NoEvent(getId());
-			} if (other instanceof FileDeletedEvent)
-				return new FileDeletedEvent(getId());	//TODO: check if this is a valid scenario
+				if (getId().equals(other.getId()))
+					return new NoEvent(getId());
+				if (isSuperDirEvent)
+					return new FileDeletedEvent(this.getId());
+				return new FileAddedEvent(other.getId());
+			} if (other instanceof FileDeletedEvent) {
+				if (isSuperDirEvent)
+					return new FileDeletedEvent(getId());
+				return new FileDeletedEvent(other.getId());
+			}
 			return other.combine(this);
 		}
 
 		@Override
 		public void execute() {
-			// TODO Auto-generated method stub
-			
+			Iterator<Listener> it = getListeners();
+			while (it.hasNext())
+				it.next().fileDeleted(getId());	
 		}
 		
 	}
@@ -284,20 +320,27 @@ public class DirectoryNotifier extends Notifier<DirectoryNotifier.Listener> {
 			if (other instanceof NoEvent)
 				return new FileModifiedEvent(getId());
 			if (other instanceof FileAddedEvent)
-				return new FileAddedEvent(getId());
+				return new FileAddedEvent(other.getId());
 			if (other instanceof FileDeletedEvent)
-				return new FileDeletedEvent(getId());	//TODO: is removed -> modified a scenario?
-			if (other instanceof FileModifiedEvent)
-				return new FileModifiedEvent(getId());
+				return new FileDeletedEvent(other.getId());	//TODO: is removed -> modified a scenario?
+			boolean isSuperDirEvent = other.getId().startsWith(getId());
+			if (other instanceof FileModifiedEvent) {
+				if (isSuperDirEvent)
+					return new FileModifiedEvent(getId());
+				return new FileModifiedEvent(other.getId());
+			}
 			return other.combine(this);
 		}
 
 		@Override
 		public void execute() {
-			// TODO Auto-generated method stub
-			
+			// TODO always notify?
+			if (getId().toFile().isFile()) {
+				Iterator<Listener> it = getListeners();
+				while (it.hasNext())
+					it.next().fileModified(getId());		
+			}
 		}
-		
 	}
 	
 }

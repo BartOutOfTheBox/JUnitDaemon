@@ -46,7 +46,7 @@ public class DirectoryNotifierTest {
 	
 	private static void setupNotifier() {
 		try {
-			notifier = new DirectoryNotifier(tmpPath, true);
+			notifier = new DirectoryNotifier(tmpPath, 200L);
 			notifier.addListener(new Listener() {
 					
 					@Override
@@ -75,8 +75,9 @@ public class DirectoryNotifierTest {
 	private Listener dirListener;
 	
 	@Before
-	public void addRootTestFiles() throws IOException {
+	public void addRootTestFiles() throws IOException, InterruptedException {
 		rootFile = Files.createFile(tmpPath.resolve(Paths.get("rootFile")));
+		Thread.sleep(201L);
 	}
 	
 	@Test

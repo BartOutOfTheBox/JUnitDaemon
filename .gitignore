@@ -32,3 +32,5 @@ nb-configuration.xml
 ## WINDOWS CRAP
 *~
 *~*
+/bin/
+/target/
