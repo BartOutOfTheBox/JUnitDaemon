@@ -27,7 +27,7 @@ import kuleuven.groep9.Notifier;
  * @author r0254751
  *
  */
-public class Code extends Notifier<Listener<ClassLoadedEvent>, ClassLoadedEvent> {
+public class Code extends Notifier<Code.Listener> {
 
 	private static final String JAVA_EXTENSION = "class";
 	
@@ -247,6 +247,10 @@ public class Code extends Notifier<Listener<ClassLoadedEvent>, ClassLoadedEvent>
 	
 	public Class<?>[] getActiveClasses() {
 		return activeClasses.toArray(new Class<?>[activeClasses.size()]);
+	}
+
+	public interface Listener {
+	
 	}
 	
 }
