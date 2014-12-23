@@ -44,61 +44,64 @@ public class Code extends Notifier<Code.Listener> {
 	 * This DirectoryListener is responsible for calling the right methods 
 	 * when a file related to the code this object represents is added/altered/deleted.
 	 */
-	private final Listener<DirectoryEvent> dirListener = new Listener<DirectoryEvent>() {
+	private final DirectoryNotifier.Listener dirListener = new DirectoryNotifier.Listener() {
 		
 		@Override
-		public void onEvent(DirectoryEvent event) {
-			Path eventPath = event.getDir().resolve(event.getEvent().context());
-			System.out.println("event received: " + event.getDir().resolve(eventPath));
-			if (isJava(getFileName(event.getEvent()))) {
-				//FIXME: this structure resembles a case like structure. 
-				//Use some sort of strategy pattern?
-				if (event.getEvent().kind().equals(StandardWatchEventKinds.ENTRY_DELETE)){
-					System.out.println("File removed event received");
-					//java doesn't allow manual unloading of classes,
-					//(this isn't a problem though. If they were referenced, 
-					//they couldn't be deleted without altering other files.)
-					
-					//but Listeners still might need to be notified,
-					//since they need to remove the test class from the OverviewRunner
-					//notify the ClassReloadedListeners there's a class gone.
-					try {
-						Class<?> clazz = loadClassFromPath(eventPath);
-						activeClasses.remove(clazz);
-						Code.this.notifyAllListeners(new ClassLoadedEvent(clazz, ClassLoadedEvent.Kind.DELETED));
-					} catch (ClassNotFoundException | IOException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
-					
-				} else if (event.getEvent().kind().equals(StandardWatchEventKinds.ENTRY_CREATE)) {
-					System.out.println("File created event received");
-					//Load the new file
-					//This can be done using the still existing ClassLoader.
-					//Dependencies will still be okay, since no class actually changed.
-					try {
-						Class<?> clazz = loadClassFromPath(eventPath);
-						activeClasses.add(clazz);
-						System.out.println(clazz.getName());
-						//notify the ClassReloadedListeners there's a brand new class.
-						Code.this.notifyAllListeners(new ClassLoadedEvent(clazz, ClassLoadedEvent.Kind.NEW));
-					} catch (ClassNotFoundException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					} catch (IOException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
-				} else if (event.getEvent().kind().equals(StandardWatchEventKinds.ENTRY_MODIFY)) {
-					System.out.println("File modified event received");
-					//Java doesn't allow reloading of classes using the same class loader.
-					//If we would only load in the changed class in a new loader,
-					//other classes will still reference to the old version of the class in the old loader.
-					//to fix this, we need to take a new ClassLoader and reload all classes.
-					//Deal with it!
-					//The class Project is responsible for swapping ClassLoaders when needed.
-					dirtyPaths.add(eventPath);
-					getProject().reload();
+		public void fileDeleted(Path absoluteDir) {
+			if (isJava(getFileName(absoluteDir))) {
+				System.out.println("File removed event received");
+				//java doesn't allow manual unloading of classes,
+				//(this isn't a problem though. If they were referenced, 
+				//they couldn't be deleted without altering other files.)
+				
+				//but Listeners still might need to be notified,
+				//since they need to remove the test class from the OverviewRunner
+				//notify the ClassReloadedListeners there's a class gone.
+				try {
+					Class<?> clazz = loadClassFromPath(absoluteDir);
+					activeClasses.remove(clazz);
+					Code.this.notifyAllListeners(new ClassLoadedEvent(clazz, ClassLoadedEvent.Kind.DELETED));
+				} catch (ClassNotFoundException | IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+		}
+		
+		@Override
+		public void fileModified(Path absoluteDir) {
+			if (isJava(getFileName(absoluteDir))) {
+				System.out.println("File modified event received");
+				//Java doesn't allow reloading of classes using the same class loader.
+				//If we would only load in the changed class in a new loader,
+				//other classes will still reference to the old version of the class in the old loader.
+				//to fix this, we need to take a new ClassLoader and reload all classes.
+				//Deal with it!
+				//The class Project is responsible for swapping ClassLoaders when needed.
+				dirtyPaths.add(absoluteDir);
+				getProject().reload();
+			}
+		}
+		
+		@Override
+		public void fileAdded(Path absoluteDir) {
+			if (isJava(getFileName(absoluteDir))) {
+				System.out.println("File created event received");
+				//Load the new file
+				//This can be done using the still existing ClassLoader.
+				//Dependencies will still be okay, since no class actually changed.
+				try {
+					Class<?> clazz = loadClassFromPath(absoluteDir);
+					activeClasses.add(clazz);
+					System.out.println(clazz.getName());
+					//notify the ClassReloadedListeners there's a brand new class.
+					Code.this.notifyAllListeners(new ClassLoadedEvent(clazz, ClassLoadedEvent.Kind.NEW));
+				} catch (ClassNotFoundException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
 				}
 			}
 		}
@@ -108,9 +111,8 @@ public class Code extends Notifier<Code.Listener> {
 		 * @param event The event to examine.
 		 * @return The name of the altered file.
 		 */
-		private String getFileName(WatchEvent<Path> event){
-	        Path name = event.context();
-	        Path child = name.resolve(name);
+		private String getFileName(Path path){
+	        Path child = path.resolve(path);
 	        return child.toString();
 		}
 	};
@@ -146,11 +148,11 @@ public class Code extends Notifier<Code.Listener> {
 		this.project = project;
 		this.codebaseDir = codebaseDir;
 		this.codeDir = codeDir;
-		DirectoryNotifier dirNotifier = new DirectoryNotifier(codeDir, true);
+		DirectoryNotifier dirNotifier = new DirectoryNotifier(codeDir, 200L);
 		dirNotifier.addListener(this.getListener());
 	}
 
-	private Listener<DirectoryEvent> getListener() {
+	private DirectoryNotifier.Listener getListener() {
 		return dirListener;
 	}
 
