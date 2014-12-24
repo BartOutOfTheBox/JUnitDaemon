@@ -6,11 +6,10 @@ import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
-import java.nio.file.StandardWatchEventKinds;
-import java.nio.file.WatchEvent;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
@@ -60,8 +59,10 @@ public class Code extends Notifier<Code.Listener> {
 				try {
 					Class<?> clazz = loadClassFromPath(absoluteDir);
 					activeClasses.remove(clazz);
-					Code.this.notifyAllListeners(new ClassLoadedEvent(clazz, ClassLoadedEvent.Kind.DELETED));
-				} catch (ClassNotFoundException | IOException e) {
+					Iterator<Code.Listener> it = getListeners();
+					while (it.hasNext())
+						it.next().classRemoved(clazz);
+					} catch (ClassNotFoundException | IOException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
@@ -95,7 +96,9 @@ public class Code extends Notifier<Code.Listener> {
 					activeClasses.add(clazz);
 					System.out.println(clazz.getName());
 					//notify the ClassReloadedListeners there's a brand new class.
-					Code.this.notifyAllListeners(new ClassLoadedEvent(clazz, ClassLoadedEvent.Kind.NEW));
+					Iterator<Code.Listener> it = getListeners();
+					while (it.hasNext())
+						it.next().classAdded(clazz);
 				} catch (ClassNotFoundException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
@@ -230,10 +233,15 @@ public class Code extends Notifier<Code.Listener> {
 							Class<?> clazz = loadClassFromPath(file);
 							activeClasses.add(clazz);
 							if (dirtyPaths.contains(file)) {
-								notifyAllListeners(new ClassLoadedEvent(clazz, ClassLoadedEvent.Kind.CHANGED));
+								Iterator<Code.Listener> it = getListeners();
+								while (it.hasNext())
+									it.next().classChanged(clazz);
 								dirtyPaths.remove(file);
-							} else
-								notifyAllListeners(new ClassLoadedEvent(clazz, ClassLoadedEvent.Kind.RELOADED));
+							} else {
+								Iterator<Code.Listener> it = getListeners();
+								while (it.hasNext())
+									it.next().classReloaded(clazz);
+							}
 						} catch (ClassNotFoundException e) {
 							e.printStackTrace();
 						}
@@ -252,7 +260,10 @@ public class Code extends Notifier<Code.Listener> {
 	}
 
 	public interface Listener {
-	
+		public void classReloaded(Class<?> clazz);
+		public void classChanged(Class<?> clazz);
+		public void classRemoved(Class<?> clazz);
+		public void classAdded(Class<?> clazz);
 	}
 	
 }
