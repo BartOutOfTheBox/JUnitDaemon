@@ -86,26 +86,35 @@ public class Code extends Notifier<Code.Listener> {
 		
 		@Override
 		public void fileAdded(Path absoluteDir) {
-			if (isJava(getFileName(absoluteDir))) {
-				System.out.println("File created event received");
-				//Load the new file
-				//This can be done using the still existing ClassLoader.
-				//Dependencies will still be okay, since no class actually changed.
-				try {
-					Class<?> clazz = loadClassFromPath(absoluteDir);
-					activeClasses.add(clazz);
-					System.out.println(clazz.getName());
-					//notify the ClassReloadedListeners there's a brand new class.
-					Iterator<Code.Listener> it = getListeners();
-					while (it.hasNext())
-						it.next().classAdded(clazz);
-				} catch (ClassNotFoundException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				} catch (IOException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
+			System.out.println("File created event received");
+			//Load the new file(s)
+			//This can be done using the still existing ClassLoader.
+			//Dependencies will still be okay, since no class actually changed.
+			try {
+				// TODO does this walkFileTree work if you give it a file to walk on?
+				Files.walkFileTree(absoluteDir, new SimpleFileVisitor<Path>() {			    
+					@Override
+					public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) 
+							throws IOException {
+						if(isJava(file.toString())){
+							try {
+								System.out.println("loading code.");
+								System.out.println("now loading: " + file);
+								Class<?> clazz = loadClassFromPath(file);
+								activeClasses.add(clazz);
+								Iterator<Code.Listener> it = getListeners();
+								while (it.hasNext())
+									it.next().classAdded(clazz);
+							} catch (ClassNotFoundException e) {
+								e.printStackTrace();
+							}
+						}
+						return FileVisitResult.CONTINUE;
+					}
+				});
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
 			}
 		}
 		
