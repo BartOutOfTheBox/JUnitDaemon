@@ -7,13 +7,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Set;
 
 import kuleuven.groep9.Notifier;
+import kuleuven.groep9.classloading.DirectoryNotifier.DirectoryEvent;
+import kuleuven.groep9.taskqueues.TaskQueue;
+import kuleuven.groep9.taskqueues.TimedTask;
+import kuleuven.groep9.taskqueues.Worker;
 
 /**
  * This class represents a kind of code from the project to be analyzed by the JUnitDaemon.
@@ -35,99 +37,11 @@ public class Code extends Notifier<Code.Listener> {
 	private final Path codebaseDir;
 	private final Path codeDir;
 	
-	private Set<Path> dirtyPaths = new HashSet<Path>();
+	private Set<Class<?>> dirtyClasses = new HashSet<Class<?>>();	
+	private Set<Class<?>> activeClasses = new HashSet<Class<?>>();
 	
-	private List<Class<?>> activeClasses = new ArrayList<Class<?>>();
-	
-	/**
-	 * This DirectoryListener is responsible for calling the right methods 
-	 * when a file related to the code this object represents is added/altered/deleted.
-	 */
-	private final DirectoryNotifier.Listener dirListener = new DirectoryNotifier.Listener() {
-		
-		@Override
-		public void fileDeleted(Path absoluteDir) {
-			if (isJava(getFileName(absoluteDir))) {
-				System.out.println("File removed event received");
-				//java doesn't allow manual unloading of classes,
-				//(this isn't a problem though. If they were referenced, 
-				//they couldn't be deleted without altering other files.)
-				
-				//but Listeners still might need to be notified,
-				//since they need to remove the test class from the OverviewRunner
-				//notify the ClassReloadedListeners there's a class gone.
-				try {
-					Class<?> clazz = loadClassFromPath(absoluteDir);
-					activeClasses.remove(clazz);
-					Iterator<Code.Listener> it = getListeners();
-					while (it.hasNext())
-						it.next().classRemoved(clazz);
-					} catch (ClassNotFoundException | IOException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-			}
-		}
-		
-		@Override
-		public void fileModified(Path absoluteDir) {
-			if (isJava(getFileName(absoluteDir))) {
-				System.out.println("File modified event received");
-				//Java doesn't allow reloading of classes using the same class loader.
-				//If we would only load in the changed class in a new loader,
-				//other classes will still reference to the old version of the class in the old loader.
-				//to fix this, we need to take a new ClassLoader and reload all classes.
-				//Deal with it!
-				//The class Project is responsible for swapping ClassLoaders when needed.
-				dirtyPaths.add(absoluteDir);
-				getProject().reload();
-			}
-		}
-		
-		@Override
-		public void fileAdded(Path absoluteDir) {
-			System.out.println("File created event received");
-			//Load the new file(s)
-			//This can be done using the still existing ClassLoader.
-			//Dependencies will still be okay, since no class actually changed.
-			try {
-				// TODO does this walkFileTree work if you give it a file to walk on?
-				Files.walkFileTree(absoluteDir, new SimpleFileVisitor<Path>() {			    
-					@Override
-					public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) 
-							throws IOException {
-						if(isJava(file.toString())){
-							try {
-								System.out.println("loading code.");
-								System.out.println("now loading: " + file);
-								Class<?> clazz = loadClassFromPath(file);
-								activeClasses.add(clazz);
-								Iterator<Code.Listener> it = getListeners();
-								while (it.hasNext())
-									it.next().classAdded(clazz);
-							} catch (ClassNotFoundException e) {
-								e.printStackTrace();
-							}
-						}
-						return FileVisitResult.CONTINUE;
-					}
-				});
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-		}
-		
-		/**
-		 * Get the filename of the file related to the given event.
-		 * @param event The event to examine.
-		 * @return The name of the altered file.
-		 */
-		private String getFileName(Path path){
-	        Path child = path.resolve(path);
-	        return child.toString();
-		}
-	};
+	private final long timeToCombine;
+	private final TaskQueue<ClassEvent> eventQueue;
 	
 	/**
 	 * This constructor uses the dedicated constructor {@link #Code(Path, Path)} as follows:
@@ -137,8 +51,8 @@ public class Code extends Notifier<Code.Listener> {
 	 * 
 	 * @throws IOException
 	 */
-	public Code(Project project, Path codeDir) throws IOException {
-		this(project, codeDir, codeDir);
+	public Code(Project project, Path codeDir, long timeToCombine) throws IOException {
+		this(project, codeDir, codeDir, timeToCombine);
 	}
 	
 	/**
@@ -156,10 +70,22 @@ public class Code extends Notifier<Code.Listener> {
 	 * @param codeDir	The directory where the package relevant to this code is found.
 	 * @throws IOException When the directoryNotifier can not notify about the requested sourcefolder.
 	 */
-	public Code(Project project, Path codebaseDir, Path codeDir) throws IOException {
+	public Code(Project project, Path codebaseDir, Path codeDir, long timeToCombine) throws IOException {
+		this.timeToCombine = timeToCombine;
+		this.eventQueue = new TaskQueue<ClassEvent>();
 		this.project = project;
 		this.codebaseDir = codebaseDir;
 		this.codeDir = codeDir;
+		
+		// TODO  multiple workers?
+        new Worker<ClassEvent>(eventQueue) {
+
+			@Override
+			protected void work(ClassEvent task) {
+				task.execute();
+			}
+		}.start();
+		
 		DirectoryNotifier dirNotifier = new DirectoryNotifier(codeDir, 200L);
 		dirNotifier.addListener(this.getListener());
 	}
@@ -219,7 +145,8 @@ public class Code extends Notifier<Code.Listener> {
 		className = getCodebaseDir().relativize(pathToClass).toString();
 		className = className.replace('/', '.');
 		className = className.replace('\\', '.');
-		className = className.substring(0, className.length() - JAVA_EXTENSION.length() - 1);
+		if (isJava(className)) 
+			className = className.substring(0, className.length() - JAVA_EXTENSION.length() - 1);
 		System.out.println("dirived classname: " + className);
 		return className;
 	}
@@ -230,7 +157,7 @@ public class Code extends Notifier<Code.Listener> {
 
 	public void reload() {
 		try {
-			activeClasses.clear();
+			final Set<Class<?>> newActiveClasses = new HashSet<Class<?>>();
 			Files.walkFileTree(getCodeDir(), new SimpleFileVisitor<Path>() {			    
 			    @Override
 			    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) 
@@ -240,16 +167,19 @@ public class Code extends Notifier<Code.Listener> {
 			    	if(isJava(file.toString())){
 			    		try {
 							Class<?> clazz = loadClassFromPath(file);
-							activeClasses.add(clazz);
-							if (dirtyPaths.contains(file)) {
+							newActiveClasses.add(clazz);
+							if (dirtyClasses.contains(file)) {
 								Iterator<Code.Listener> it = getListeners();
 								while (it.hasNext())
 									it.next().classChanged(clazz);
-								dirtyPaths.remove(file);
-							} else {
+							} else if (getActiveClasses().contains(clazz)) {
 								Iterator<Code.Listener> it = getListeners();
 								while (it.hasNext())
 									it.next().classReloaded(clazz);
+							} else {
+								Iterator<Code.Listener> it = getListeners();
+								while (it.hasNext())
+									it.next().classAdded(clazz);
 							}
 						} catch (ClassNotFoundException e) {
 							e.printStackTrace();
@@ -258,21 +188,227 @@ public class Code extends Notifier<Code.Listener> {
 			        return FileVisitResult.CONTINUE;
 			    }
 			});
+			for (Class<?> clazz : this.activeClasses) {
+				if (! newActiveClasses.contains(clazz)) {
+					Iterator<Code.Listener> it = getListeners();
+					while (it.hasNext())
+						it.next().classRemoved(clazz);
+				}
+			}
+			this.activeClasses = newActiveClasses;
+			this.dirtyClasses.clear();
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
-	
-	public Class<?>[] getActiveClasses() {
-		return activeClasses.toArray(new Class<?>[activeClasses.size()]);
+
+	protected Set<Class<?>> getActiveClasses() {
+		return activeClasses;
 	}
+
+	/**
+	 * This DirectoryListener is responsible for calling the right methods 
+	 * when a file related to the code this object represents is added/altered/deleted.
+	 */
+	private final DirectoryNotifier.Listener dirListener = new DirectoryNotifier.Listener() {
+		
+		@Override
+		public void fileDeleted(Path absoluteDir) {
+			if (isJava(getFileName(absoluteDir))) {
+				System.out.println("File removed event received");
+				for (Class<?> clazz : getActiveClasses()) {
+					if (clazz.getName().startsWith(getClassNameFromPath(absoluteDir))) {
+						eventQueue.add(new ClassDeletedEvent(clazz));
+					}
+				}
+			}
+		}
+		
+		@Override
+		public void fileModified(Path absoluteDir) {
+			if (isJava(getFileName(absoluteDir))) {
+				System.out.println("File modified event received");
+				for (Class<?> clazz : getActiveClasses()) {
+					if (clazz.getName().startsWith(getClassNameFromPath(absoluteDir))) {
+						eventQueue.add(new ClassModifiedEvent(clazz));
+					}
+				}
+			}
+		}
+		
+		@Override
+		public void fileAdded(Path absoluteDir) {
+			System.out.println("File created event received");
+			//Load the new file(s)
+			//This can be done using the still existing ClassLoader.
+			//Dependencies will still be okay, since no class actually changed.
+			try {
+				// TODO does this walkFileTree work if you give it a file to walk on?
+				Files.walkFileTree(absoluteDir, new SimpleFileVisitor<Path>() {			    
+					@Override
+					public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) 
+							throws IOException {
+						if(isJava(file.toString())){
+							eventQueue.add(new ClassAddedEvent(file));
+						}
+						return FileVisitResult.CONTINUE;
+					}
+				});
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		
+		/**
+		 * Get the filename of the file related to the given event.
+		 * @param event The event to examine.
+		 * @return The name of the altered file.
+		 */
+		private String getFileName(Path path){
+	        Path child = path.resolve(path);
+	        return child.toString();
+		}
+	};
 
 	public interface Listener {
 		public void classReloaded(Class<?> clazz);
 		public void classChanged(Class<?> clazz);
 		public void classRemoved(Class<?> clazz);
 		public void classAdded(Class<?> clazz);
+	}
+	
+	protected abstract class ClassEvent extends TimedTask<ClassEvent> {
+		protected Class<?> clazz;
+		
+		public ClassEvent(Class<?> clazz) {
+			this(clazz, Code.this.timeToCombine);
+		}
+		
+		protected ClassEvent(Class<?> clazz, long timeToCombineMillis) {
+			super(timeToCombineMillis);
+			this.clazz = clazz;
+		}
+		
+		@Override
+		public boolean canCombine(ClassEvent other) {
+			if (other == null)
+				return false;
+			if (other.getClazz().getName().equals(getClazz().getName()))
+				return true;
+			return false;
+		}
+
+		public Class<?> getClazz() {
+			return this.clazz;
+		}
+	}
+	
+	protected class ClassDeletedEvent extends ClassEvent {
+
+		public ClassDeletedEvent(Class<?> clazz) {
+			super(clazz);
+		}
+
+		@Override
+		public ClassEvent combine(ClassEvent other) {
+			if (other instanceof ClassDeletedEvent)
+				return new ClassDeletedEvent(getClazz());
+			return other.combine(this);
+		}
+
+		@Override
+		public void execute() {
+			//java doesn't allow manual unloading of classes,
+			//(this isn't a problem though. If they were referenced, 
+			//they couldn't be deleted without altering other files.)
+			
+			//but Listeners still might need to be notified,
+			//since they need to remove the test class from the OverviewRunner
+			//notify the ClassReloadedListeners there's a class gone.
+			Iterator<Code.Listener> it = getListeners();
+			while (it.hasNext())
+				it.next().classRemoved(getClazz());
+		}
+	}
+	
+	protected class ClassAddedEvent extends ClassEvent {
+
+		private final Path pathToClass;
+		
+		public ClassAddedEvent(Path pathToClass) {
+			super(null);
+			this.pathToClass = pathToClass;
+		}
+
+		private Path getPathToClass() {
+			return pathToClass;
+		}
+		
+		@Override
+		public Class<?> getClazz() {
+			if (this.clazz == null)
+				try {
+					this.clazz = loadClassFromPath(getPathToClass());
+				} catch (ClassNotFoundException | IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			return this.clazz;
+		};
+		
+		@Override
+		public ClassEvent combine(ClassEvent other) {
+			if (other instanceof ClassDeletedEvent)
+				return new ClassModifiedEvent(getClazz());
+			else if (other instanceof ClassAddedEvent)
+				return new ClassAddedEvent(getPathToClass());
+			else return other.combine(this);
+		}
+
+		@Override
+		public void execute() {
+			System.out.println("loading code.");
+			System.out.println("now loading: " + getPathToClass());
+			Class<?> clazz = getClazz();
+			getActiveClasses().add(clazz);
+			Iterator<Code.Listener> it = getListeners();
+			while (it.hasNext())
+				it.next().classAdded(clazz);
+		}
+	}
+	
+	protected class ClassModifiedEvent extends ClassEvent {
+
+		public ClassModifiedEvent(Class<?> clazz) {
+			super(clazz);
+			Code.this.dirtyClasses.add(clazz);
+		}
+		
+		@Override
+		public boolean canCombine(ClassEvent other) {
+			if (other == null)
+				return false;
+			return true;
+		}
+
+		@Override
+		public ClassEvent combine(ClassEvent other) {
+			return new ClassModifiedEvent(other.getClazz());
+		}
+
+		@Override
+		public void execute() {
+			//Java doesn't allow reloading of classes using the same class loader.
+			//If we would only load in the changed class in a new loader,
+			//other classes will still reference to the old version of the class in the old loader.
+			//to fix this, we need to take a new ClassLoader and reload all classes.
+			//Deal with it!
+			//The class Project is responsible for swapping ClassLoaders when needed.
+			getProject().reload();
+		}
+		
 	}
 	
 }
