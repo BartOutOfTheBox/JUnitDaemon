@@ -15,16 +15,13 @@ import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.concurrent.Delayed;
-import java.util.concurrent.TimeUnit;
 
 import kuleuven.groep9.Notifier;
-import kuleuven.groep9.taskqueues.Task;
 import kuleuven.groep9.taskqueues.TaskQueue;
+import kuleuven.groep9.taskqueues.TimedTask;
 import kuleuven.groep9.taskqueues.Worker;
 
 public class DirectoryNotifier extends Notifier<DirectoryNotifier.Listener> {
@@ -157,20 +154,16 @@ public class DirectoryNotifier extends Notifier<DirectoryNotifier.Listener> {
 		void fileDeleted(Path absoluteDir);
 	}
 	
-	protected abstract class DirectoryEvent extends Task<DirectoryEvent> {
+	protected abstract class DirectoryEvent extends TimedTask<DirectoryEvent> {
 		private Path id;
-		private final Date eventTime;
-		private final Date deadline;
 		
 		public DirectoryEvent(Path id) {
 			this(id, DirectoryNotifier.this.timeToCombine);
 		}
 		
 		protected DirectoryEvent(Path id, long timeToCombineMillis) {
+			super(timeToCombineMillis);
 			this.id = id;
-			Date date = new Date();
-			this.eventTime = date;
-			this.deadline = new Date(date.getTime() + timeToCombineMillis);
 		}
 		
 		@Override
@@ -188,25 +181,6 @@ public class DirectoryNotifier extends Notifier<DirectoryNotifier.Listener> {
 
 		protected Path getId() {
 			return this.id;
-		}
-		
-		@Override
-		public long getDelay(TimeUnit unit) {
-			long delay = unit.convert((getDeadline().getTime() -  (new Date()).getTime()), TimeUnit.MILLISECONDS);
-			return delay;
-		}
-
-		@Override
-		public int compareTo(Delayed o) {
-			return (int) (o.getDelay(TimeUnit.MILLISECONDS) - this.getDelay(TimeUnit.MILLISECONDS));
-		}
-
-		protected Date getDeadline() {
-			return deadline;
-		}
-
-		protected Date getEventTime() {
-			return eventTime;
 		}
 	}
 	

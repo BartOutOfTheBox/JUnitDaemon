@@ -26,22 +26,6 @@ public class Project {
 	private URLClassLoader classLoader;
 	
 	/**
-	 * This constructor assumes all code contained 
-	 * in the codebaseDirectories is relevant to that part of the code.
-	 * 
-	 * @param codebaseDir The codebase directory of the code to test.
-	 * @param testCodebaseDir The codebase directory of the testcode.
-	 * 
-	 * @throws IOException If for some reason it's not possible to access one of the directories.
-	 */
-	public Project(Path codebaseDir, Path testCodebaseDir) throws IOException {
-		this.nbLoaders = 0;
-		this.testedCode = new Code(this, codebaseDir);
-		this.testCode = new Code(this, testCodebaseDir);
-		this.setNewClassLoader();
-	}
-	
-	/**
 	 * This constructor accepts different codebasefolders
 	 * and subsets of these codebasefolders containing the needed code.
 	 * 
@@ -53,9 +37,11 @@ public class Project {
 	 * @throws IOException If for some reason it's not possible to access one of the directories.
 	 */
 	public Project(Path codebaseDir, Path codeDir, Path testCodebaseDir, Path testCodeDir) throws IOException {
-		this.testedCode = new Code(this, codebaseDir, codeDir);
-		this.testCode = new Code(this, testCodebaseDir, testCodeDir);
+		this.nbLoaders = 0;
+		this.testedCode = new Code(this, codebaseDir, codeDir, 1000L);
+		this.testCode = new Code(this, testCodebaseDir, testCodeDir, 1000L);
 		this.setNewClassLoader();
+		this.reload();
 	}
 	
 	public Code getTestCode() {
@@ -99,7 +85,6 @@ public class Project {
 	}
 
 	protected void setNewClassLoader() throws MalformedURLException {
-		System.out.println("setting new ClassLoader");
 		URLClassLoader cl = newURLClassLoader();
 		this.setClassLoader(cl);
 	}
@@ -112,12 +97,9 @@ public class Project {
 			@Override
 			public Class<?> loadClass(String name) throws ClassNotFoundException {
 				try {
-					System.out.println("trying to load: " + name);
 					return findClass(name);
 				} catch (ClassNotFoundException e) {
-					System.out.println("failed to find: " + name + " myself. Lets hope super can load it.");
 					Class<?> clazz =  super.loadClass(name);
-					System.out.println("super loaded " + name);
 					return clazz;
 				}
 			}

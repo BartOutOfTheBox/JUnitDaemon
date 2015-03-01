@@ -29,7 +29,7 @@ public class TaskQueue<E extends Task<E>> extends DelayQueue<E> {
 		super.put(e);
 	}
 
-	private E combineWhenPossible(E e) throws ClassCastException {
+	private synchronized E combineWhenPossible(E e) throws ClassCastException {
 		Iterator<E> it = super.iterator();
 		while(it.hasNext()) {
 			E current = it.next();
