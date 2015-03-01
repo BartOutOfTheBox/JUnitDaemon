@@ -7,12 +7,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.Iterator;
-import java.util.Set;
+import java.util.Map;
 
 import kuleuven.groep9.Notifier;
-import kuleuven.groep9.classloading.DirectoryNotifier.DirectoryEvent;
 import kuleuven.groep9.taskqueues.TaskQueue;
 import kuleuven.groep9.taskqueues.TimedTask;
 import kuleuven.groep9.taskqueues.Worker;
@@ -37,8 +36,9 @@ public class Code extends Notifier<Code.Listener> {
 	private final Path codebaseDir;
 	private final Path codeDir;
 	
-	private Set<Class<?>> dirtyClasses = new HashSet<Class<?>>();	
-	private Set<Class<?>> activeClasses = new HashSet<Class<?>>();
+	//TODO use hashmaps <name, class>
+	private Map<String, Class<?>> dirtyClasses = new HashMap<String, Class<?>>();	
+	private Map<String, Class<?>> activeClasses = new HashMap<String, Class<?>>();
 	
 	private final long timeToCombine;
 	private final TaskQueue<ClassEvent> eventQueue;
@@ -140,14 +140,11 @@ public class Code extends Notifier<Code.Listener> {
 	 */
 	public String getClassNameFromPath(Path pathToClass) {
 		String className;
-		System.out.println("codebasedir: " + getCodebaseDir());
-		System.out.println("pathToClass: " + pathToClass);
 		className = getCodebaseDir().relativize(pathToClass).toString();
 		className = className.replace('/', '.');
 		className = className.replace('\\', '.');
 		if (isJava(className)) 
 			className = className.substring(0, className.length() - JAVA_EXTENSION.length() - 1);
-		System.out.println("dirived classname: " + className);
 		return className;
 	}
 
@@ -157,22 +154,20 @@ public class Code extends Notifier<Code.Listener> {
 
 	public void reload() {
 		try {
-			final Set<Class<?>> newActiveClasses = new HashSet<Class<?>>();
+			final Map<String, Class<?>> newActiveClasses = new HashMap<String, Class<?>>();
 			Files.walkFileTree(getCodeDir(), new SimpleFileVisitor<Path>() {			    
 			    @Override
 			    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) 
 			    	throws IOException {
-			    	System.out.println("reloading code.");
-			    	System.out.println("now reloading: " + file);
 			    	if(isJava(file.toString())){
 			    		try {
 							Class<?> clazz = loadClassFromPath(file);
-							newActiveClasses.add(clazz);
-							if (dirtyClasses.contains(file)) {
+							newActiveClasses.put(clazz.getName(), clazz);
+							if (dirtyClasses.containsKey(clazz.getName())) {
 								Iterator<Code.Listener> it = getListeners();
 								while (it.hasNext())
 									it.next().classChanged(clazz);
-							} else if (getActiveClasses().contains(clazz)) {
+							} else if (activeClasses.containsKey(clazz.getName())) {
 								Iterator<Code.Listener> it = getListeners();
 								while (it.hasNext())
 									it.next().classReloaded(clazz);
@@ -188,8 +183,15 @@ public class Code extends Notifier<Code.Listener> {
 			        return FileVisitResult.CONTINUE;
 			    }
 			});
-			for (Class<?> clazz : this.activeClasses) {
-				if (! newActiveClasses.contains(clazz)) {
+			for (Class<?> clazz : this.activeClasses.values()) {
+				boolean contains = false;
+				for (Class<?> currentClazz : newActiveClasses.values()) {
+					if (currentClazz.getName().startsWith(clazz.getName())) {
+						contains = true;
+						break;
+					}
+				}
+				if (! contains) {
 					Iterator<Code.Listener> it = getListeners();
 					while (it.hasNext())
 						it.next().classRemoved(clazz);
@@ -203,7 +205,7 @@ public class Code extends Notifier<Code.Listener> {
 		}
 	}
 
-	protected Set<Class<?>> getActiveClasses() {
+	protected Map<String, Class<?>> getActiveClasses() {
 		return activeClasses;
 	}
 
@@ -216,8 +218,7 @@ public class Code extends Notifier<Code.Listener> {
 		@Override
 		public void fileDeleted(Path absoluteDir) {
 			if (isJava(getFileName(absoluteDir))) {
-				System.out.println("File removed event received");
-				for (Class<?> clazz : getActiveClasses()) {
+				for (Class<?> clazz : getActiveClasses().values()) {
 					if (clazz.getName().startsWith(getClassNameFromPath(absoluteDir))) {
 						eventQueue.add(new ClassDeletedEvent(clazz));
 					}
@@ -228,8 +229,7 @@ public class Code extends Notifier<Code.Listener> {
 		@Override
 		public void fileModified(Path absoluteDir) {
 			if (isJava(getFileName(absoluteDir))) {
-				System.out.println("File modified event received");
-				for (Class<?> clazz : getActiveClasses()) {
+				for (Class<?> clazz : getActiveClasses().values()) {
 					if (clazz.getName().startsWith(getClassNameFromPath(absoluteDir))) {
 						eventQueue.add(new ClassModifiedEvent(clazz));
 					}
@@ -239,7 +239,6 @@ public class Code extends Notifier<Code.Listener> {
 		
 		@Override
 		public void fileAdded(Path absoluteDir) {
-			System.out.println("File created event received");
 			//Load the new file(s)
 			//This can be done using the still existing ClassLoader.
 			//Dependencies will still be okay, since no class actually changed.
@@ -291,8 +290,7 @@ public class Code extends Notifier<Code.Listener> {
 			this.clazz = clazz;
 		}
 		
-		@Override
-		public boolean canCombine(ClassEvent other) {
+		public boolean canAlwaysCombine(ClassEvent other) {
 			if (other == null)
 				return false;
 			if (other.getClazz().getName().equals(getClazz().getName()))
@@ -330,6 +328,15 @@ public class Code extends Notifier<Code.Listener> {
 			Iterator<Code.Listener> it = getListeners();
 			while (it.hasNext())
 				it.next().classRemoved(getClazz());
+		}
+
+		@Override
+		public boolean canCombine(ClassEvent other) {
+			if (canAlwaysCombine(other))
+				return true;
+			if (other instanceof ClassDeletedEvent)
+				return false;
+			return other.canCombine(this);
 		}
 	}
 	
@@ -369,13 +376,22 @@ public class Code extends Notifier<Code.Listener> {
 
 		@Override
 		public void execute() {
-			System.out.println("loading code.");
-			System.out.println("now loading: " + getPathToClass());
 			Class<?> clazz = getClazz();
-			getActiveClasses().add(clazz);
+			getActiveClasses().put(clazz.getName(), clazz);
 			Iterator<Code.Listener> it = getListeners();
 			while (it.hasNext())
 				it.next().classAdded(clazz);
+		}
+
+		@Override
+		public boolean canCombine(ClassEvent other) {
+			if (canAlwaysCombine(other))
+				return true;
+			if (other instanceof ClassDeletedEvent)
+				return false;
+			if (other instanceof ClassAddedEvent)
+				return false;
+			return other.canCombine(this);
 		}
 	}
 	
@@ -383,11 +399,11 @@ public class Code extends Notifier<Code.Listener> {
 
 		public ClassModifiedEvent(Class<?> clazz) {
 			super(clazz);
-			Code.this.dirtyClasses.add(clazz);
+			Code.this.dirtyClasses.put(clazz.getName(), clazz);
 		}
 		
 		@Override
-		public boolean canCombine(ClassEvent other) {
+		public boolean canCombine(ClassEvent  other) {
 			if (other == null)
 				return false;
 			return true;
@@ -395,7 +411,7 @@ public class Code extends Notifier<Code.Listener> {
 
 		@Override
 		public ClassEvent combine(ClassEvent other) {
-			return new ClassModifiedEvent(other.getClazz());
+			return new ClassModifiedEvent(this.getClazz());
 		}
 
 		@Override
