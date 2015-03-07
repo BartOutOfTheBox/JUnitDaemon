@@ -13,7 +13,7 @@ public class ManualProjectTest {
 	
 	public ManualProjectTest() {
 		try {
-			Project proj = new Project(
+			final Project proj = new Project(
 					Paths.get("C:\\Users\\Bart\\JavaWorkspace\\testproject\\bin"), 
 					Paths.get("C:\\Users\\Bart\\JavaWorkspace\\testproject\\bin\\code"), 
 					Paths.get("C:\\Users\\Bart\\JavaWorkspace\\testproject\\bin"), 
@@ -23,21 +23,25 @@ public class ManualProjectTest {
 				@Override
 				public void classRemoved(Class<?> clazz) {
 					System.out.println(">>> " + clazz.getName() + " removed.");
+					System.out.println(">>> Project loading status: " + proj.isLoaded());
 				}
 				
 				@Override
 				public void classReloaded(Class<?> clazz) {
 					System.out.println(">>> " + clazz.getName() + " reloaded.");
+					System.out.println(">>> Project loading status: " + proj.isLoaded());
 				}
 				
 				@Override
 				public void classChanged(Class<?> clazz) {
 					System.out.println(">>> " + clazz.getName() + " changed.");
+					System.out.println(">>> Project loading status: " + proj.isLoaded());
 				}
 				
 				@Override
 				public void classAdded(Class<?> clazz) {
 					System.out.println(">>> " + clazz.getName() + " added.");
+					System.out.println(">>> Project loading status: " + proj.isLoaded());
 				}
 			});
 		} catch (IOException e) {

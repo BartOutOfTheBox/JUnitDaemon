@@ -6,7 +6,9 @@ package kuleuven.groep9.runner;
 import java.util.ArrayList;
 import java.util.List;
 
+import kuleuven.groep9.classloading.Code;
 import kuleuven.groep9.classloading.Project;
+import kuleuven.groep9.statistics.Statistic;
 import kuleuven.groep9.statistics.StatisticTracker;
 
 import org.junit.internal.builders.AllDefaultPossibilitiesBuilder;
@@ -28,97 +30,128 @@ public abstract class AbstractExecutionManager {
 	private Sorter[] sorters = {Sorter.NULL};
 	private int[] weights = {1};
 	
-	private List<StatisticTracker> trackers = new ArrayList<StatisticTracker>();
+	private List<StatisticTracker<? extends Statistic>> trackers = 
+			new ArrayList<StatisticTracker<? extends Statistic>>();
 	
 	private final Project project;
 	
-	private class LoadingThread extends Thread{
-		public LoadingThread(){
+	protected class TestingThread extends Thread{
+		public TestingThread(){
 			super(new Runnable(){
-	
 						@Override
 						public void run() {
-							while(! project.isLoaded()){
-								System.out.println("the project is loading?: " + project.isLoaded());
-								try {
-									Thread.sleep(100);
-								} catch (InterruptedException e) {
-									e.printStackTrace();
-								}
-							}
-							System.out.println("starting test run");
-							startTestRun();
-							
+							if (project.isLoaded())
+								AbstractExecutionManager.this.run(getNotifier());
 						}
 						
 					});
 		}
 	}
 	
-	private Thread waitTillDone;
-	
-	private Listener<ClassLoadedEvent> functionalCodeListener = new Listener<ClassLoadedEvent>() {
+	private Project.Listener projListener = new Project.Listener() {
 		
 		@Override
-		public void onEvent(ClassLoadedEvent event) {
-			System.out.println("ClassLoadedEvent received");
-			if (event.getKind().equals(ClassLoadedEvent.Kind.CHANGED)
-					|| event.getKind().equals(ClassLoadedEvent.Kind.RELOADED)) {
-				System.out.println("ClassLoadedEvent received for functionalcode (changed or reloaded");
-				if(waitTillDone == null || !waitTillDone.isAlive()){
-					waitTillDone = new LoadingThread();
-					waitTillDone.start();
-				}
-			}
+		public void stoppedLoading() {
+			startTestRun();
+		}
+		
+		@Override
+		public void startedLoading() {
+			// TODO Auto-generated method stub
+			
 		}
 	};
 	
-	private Listener<ClassLoadedEvent> testCodeListener = new Listener<ClassLoadedEvent>() {
-
+	private Code.Listener functionalCodeListener = new Code.Listener() {
+		
 		@Override
-		public void onEvent(ClassLoadedEvent event) {
-			System.out.println("ClassLoadedEvent received");
-			if (event.getKind().equals(ClassLoadedEvent.Kind.NEW)
-					|| event.getKind().equals(ClassLoadedEvent.Kind.CHANGED)
-					|| event.getKind().equals(ClassLoadedEvent.Kind.RELOADED)) {
-				System.out.println("ClassLoadedEvent received for testcode (new or changed or reloaded");
-				try {
-					System.out.println("reloading test in the computer");
-					getComputer().reloadClass(getRunner(), event.getClazz(), builder);
-				} catch (InitializationError e) {
-					e.printStackTrace();
-				}
-				if(waitTillDone == null || !waitTillDone.isAlive()){
-					waitTillDone = new LoadingThread();
-					waitTillDone.start();
-				}
-			} else if (event.getKind().equals(ClassLoadedEvent.Kind.DELETED)) {
-				getComputer().removeClass(getRunner(), event.getClazz());
-			}
-			
-			if (event.getKind().equals(ClassLoadedEvent.Kind.CHANGED) || event.getKind().equals(ClassLoadedEvent.Kind.DELETED)) {
-				for(StatisticTracker track : getTrackers()){
-					track.removeClass(event.getClazz());
-				}
+		public void classRemoved(Class<?> clazz) {
+			// TODO Auto-generated method stub
+		}
+		
+		@Override
+		public void classReloaded(Class<?> clazz) {
+			//TODO Auto-generated method stub
+		}
+		
+		@Override
+		public void classChanged(Class<?> clazz) {
+			//TODO Auto-generated method stub
+		}
+		
+		@Override
+		public void classAdded(Class<?> clazz) {
+			// TODO Auto-generated method stub
+			if (project.isLoaded())
+				startTestRun();
+		}
+	};
+	
+	private Code.Listener testCodeListener = new Code.Listener() {
+		
+		@Override
+		public void classRemoved(Class<?> clazz) {
+			getComputer().removeClass(getRunner(), clazz);
+			for (StatisticTracker<? extends Statistic> t : getTrackers())
+				t.removeClass(clazz);
+		}
+		
+		@Override
+		public void classReloaded(Class<?> clazz) {
+			try {
+				getComputer().reloadClass(getRunner(), clazz, builder);
+			} catch (InitializationError e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
 			}
 		}
 		
+		@Override
+		public void classChanged(Class<?> clazz) {
+			System.out.println("ClassLoadedEvent received for testcode (new or changed or reloaded");
+			try {
+				System.out.println("reloading test in the computer");
+				getComputer().reloadClass(getRunner(), clazz, builder);
+				for(StatisticTracker<? extends Statistic> track : getTrackers())
+					track.removeClass(clazz);
+			} catch (InitializationError e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		
+		@Override
+		public void classAdded(Class<?> clazz) {
+			try {
+				getComputer().loadClass(getRunner(), clazz, builder);
+				//Tests from this class will be automatically added to the subscribed trackers.
+				if (project.isLoaded()) {
+					startTestRun();
+				}
+			} catch (InitializationError e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
 	};
 	
 	public AbstractExecutionManager(Project project) throws InitializationError {
 		this.project = project;
+		System.out.println("binding listeners to project");
+		project.addListener(projListener);
 		System.out.println("binding listeners to test and tested code");
 		project.getTestCode().addListener(testCodeListener);
 		project.getTestedCode().addListener(functionalCodeListener);
 		setComputer(new OverviewComputer());
 		builder = new AllDefaultPossibilitiesBuilder(true);
-		Class<?>[] classes = project.getTestCode().getActiveClasses();
+		Class<?>[] classes = (Class<?>[]) project.getTestCode().getActiveClasses().values().toArray();
 		setRunner(getComputer().getSuite(builder, classes));
 		setNotifier(new RunNotifier());
 	}
 	
 	public void run(RunNotifier notifier){
-		getRunner().sort(getSorters(),getWeights());
+		//getRunner().sort(getSorters(),getWeights());
+		getRunner().sort(getSorters()[0]);
 		getRunner().run(notifier);
 	}
 	
@@ -165,11 +198,11 @@ public abstract class AbstractExecutionManager {
 	
 	public abstract void startTestRun();
 	
-	public List<StatisticTracker> getTrackers() {
+	public List<StatisticTracker<? extends Statistic>> getTrackers() {
 		return this.trackers;
 	}
 	
-	public void addTracker(StatisticTracker tracker) {
+	public void addTracker(StatisticTracker<? extends Statistic> tracker) {
 		trackers.add(tracker);
 		getNotifier().addListener(tracker);
 	}

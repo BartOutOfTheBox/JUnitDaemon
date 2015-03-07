@@ -50,8 +50,6 @@ public class OverviewComputer extends Computer {
 	
 	/**
 	 * Verwijdert alle testen die afkomstig zijn van een gegeven testklasse en voegt ze opnieuw toe.
-	 * Hierbij gaan de statistieken over deze testen verloren.
-	 * Dit werd geschreven voor wanneer de testklasse aangepast werd.
 	 * @param overview
 	 * @param clazz
 	 * @param builder

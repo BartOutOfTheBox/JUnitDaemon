@@ -143,4 +143,13 @@ public class OverviewRunner extends ParentRunner<RecurringTest>{
 //			getFilteredChildren().add(j, result.get(j));
 //		}
 //	}
+//	
+//	private List<RecurringTest> getFilteredChildren() {
+//		//TODO FINISH
+//		Iterator<Description> it = getDescription().getChildren().iterator();
+//		while (it.hasNext()) {
+//			Description current = it.next();
+//			current.g
+//		}
+//	}
 }

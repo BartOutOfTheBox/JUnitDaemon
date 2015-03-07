@@ -205,7 +205,7 @@ public class Code extends Notifier<Code.Listener> {
 		}
 	}
 
-	protected Map<String, Class<?>> getActiveClasses() {
+	public Map<String, Class<?>> getActiveClasses() {
 		return activeClasses;
 	}
 
