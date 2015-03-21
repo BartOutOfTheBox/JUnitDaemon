@@ -44,7 +44,6 @@ public class Project extends Notifier<Project.Listener>{
 		this.testedCode = new Code(this, codebaseDir, codeDir, 1000L);
 		this.testCode = new Code(this, testCodebaseDir, testCodeDir, 1000L);
 		this.setNewClassLoader();
-		this.reload();
 	}
 	
 	public Code getTestCode() {

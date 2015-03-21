@@ -71,6 +71,7 @@ public class ManualDirectoryNotifierTest {
 		});
 	}
 	
+	@SuppressWarnings("unused")
 	private void breakdownPath() throws IOException {
 		removeTmpFiles();
 		try {

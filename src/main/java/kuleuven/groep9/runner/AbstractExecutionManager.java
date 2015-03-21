@@ -11,11 +11,13 @@ import kuleuven.groep9.classloading.Project;
 import kuleuven.groep9.statistics.Statistic;
 import kuleuven.groep9.statistics.StatisticTracker;
 
-import org.junit.internal.builders.AllDefaultPossibilitiesBuilder;
+import kuleuven.groep9.internal.requests.SortingRequest;
+
+
+import org.junit.runner.JUnitCore;
+import org.junit.runner.Request;
 import org.junit.runner.manipulation.Sorter;
-import org.junit.runner.notification.RunNotifier;
 import org.junit.runners.model.InitializationError;
-import org.junit.runners.model.RunnerBuilder;
 
 /**
  * @author Thomas
@@ -23,12 +25,10 @@ import org.junit.runners.model.RunnerBuilder;
  */
 public abstract class AbstractExecutionManager {
 	
+	private final JUnitCore core = new JUnitCore();
+	
 	private OverviewComputer computer;
-	private OverviewRunner runner;
-	private RunnerBuilder builder;
-	private RunNotifier notifier;
-	private Sorter[] sorters = {Sorter.NULL};
-	private int[] weights = {1};
+	private Sorter sorter = Sorter.NULL;
 	
 	private List<StatisticTracker<? extends Statistic>> trackers = 
 			new ArrayList<StatisticTracker<? extends Statistic>>();
@@ -41,7 +41,7 @@ public abstract class AbstractExecutionManager {
 						@Override
 						public void run() {
 							if (project.isLoaded())
-								AbstractExecutionManager.this.run(getNotifier());
+								AbstractExecutionManager.this.run();
 						}
 						
 					});
@@ -91,46 +91,26 @@ public abstract class AbstractExecutionManager {
 		
 		@Override
 		public void classRemoved(Class<?> clazz) {
-			getComputer().removeClass(getRunner(), clazz);
 			for (StatisticTracker<? extends Statistic> t : getTrackers())
 				t.removeClass(clazz);
 		}
 		
 		@Override
 		public void classReloaded(Class<?> clazz) {
-			try {
-				getComputer().reloadClass(getRunner(), clazz, builder);
-			} catch (InitializationError e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
+			
 		}
 		
 		@Override
 		public void classChanged(Class<?> clazz) {
-			System.out.println("ClassLoadedEvent received for testcode (new or changed or reloaded");
-			try {
-				System.out.println("reloading test in the computer");
-				getComputer().reloadClass(getRunner(), clazz, builder);
-				for(StatisticTracker<? extends Statistic> track : getTrackers())
-					track.removeClass(clazz);
-			} catch (InitializationError e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
+			for(StatisticTracker<? extends Statistic> track : getTrackers())
+				track.removeClass(clazz);
 		}
 		
 		@Override
 		public void classAdded(Class<?> clazz) {
-			try {
-				getComputer().loadClass(getRunner(), clazz, builder);
-				//Tests from this class will be automatically added to the subscribed trackers.
-				if (project.isLoaded()) {
-					startTestRun();
-				}
-			} catch (InitializationError e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+			//Tests from this class will be automatically added to the subscribed trackers.
+			if (project.isLoaded()) {
+				startTestRun();
 			}
 		}
 	};
@@ -143,16 +123,11 @@ public abstract class AbstractExecutionManager {
 		project.getTestCode().addListener(testCodeListener);
 		project.getTestedCode().addListener(functionalCodeListener);
 		setComputer(new OverviewComputer());
-		builder = new AllDefaultPossibilitiesBuilder(true);
-		Class<?>[] classes = (Class<?>[]) project.getTestCode().getActiveClasses().values().toArray();
-		setRunner(getComputer().getSuite(builder, classes));
-		setNotifier(new RunNotifier());
 	}
 	
-	public void run(RunNotifier notifier){
-		//getRunner().sort(getSorters(),getWeights());
-		getRunner().sort(getSorters()[0]);
-		getRunner().run(notifier);
+	public void run(){
+		Class<?>[] testClasses = project.getTestCode().getActiveClasses().values().toArray(new Class[0]);
+		core.run(new SortingRequest(Request.classes(getComputer(), testClasses), getSorter()));
 	}
 	
 	public OverviewComputer getComputer() {
@@ -161,39 +136,13 @@ public abstract class AbstractExecutionManager {
 	public void setComputer(OverviewComputer computer) {
 		this.computer = computer;
 	}
-	public RunNotifier getNotifier() {
-		return notifier;
-	}
-	public void setNotifier(RunNotifier notifier) {
-		this.notifier = notifier;
-	}
-	public OverviewRunner getRunner() {
-		return runner;
-	}
-	protected void setRunner(OverviewRunner runner) {
-		this.runner = runner;
+	
+	public Sorter getSorter() {
+		return sorter;
 	}
 	
-	public Sorter[] getSorters() {
-		return sorters;
-	}
-	
-	public int[] getWeights(){
-		return weights;
-	}
-	
-	public void setSorters(Sorter[] sorters, int[] weights){
-		this.sorters = sorters;
-		this.weights = weights;
-	}
-
-	public void setSorters(Sorter[] sorters) {
-		int[] newWeights = new int[sorters.length];
-		for(int i=0; i<sorters.length;i++){
-			newWeights[i] = 1;
-		}
-		
-		setSorters(sorters,newWeights);
+	public void setSorter(Sorter sorter){
+		this.sorter = sorter;
 	}
 	
 	public abstract void startTestRun();
@@ -204,6 +153,10 @@ public abstract class AbstractExecutionManager {
 	
 	public void addTracker(StatisticTracker<? extends Statistic> tracker) {
 		trackers.add(tracker);
-		getNotifier().addListener(tracker);
+		getCore().addListener(tracker);
+	}
+
+	public JUnitCore getCore() {
+		return core;
 	}
 }

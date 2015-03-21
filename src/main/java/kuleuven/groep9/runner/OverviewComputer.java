@@ -1,10 +1,8 @@
 package kuleuven.groep9.runner;
 
-import org.junit.Test;
 import org.junit.runners.model.*;
 import org.junit.runner.*;
 
-import java.util.*;
 
 /**
  * @author Thomas
@@ -33,21 +31,29 @@ public class OverviewComputer extends Computer {
 	 * 			De RunnerBuilder die bepaald hoe de testmethodes moeten worden uitgevoerd.
 	 * @throws InitializationError
 	 */
-	protected void loadClass(OverviewRunner overview, Class<?> clazz, RunnerBuilder builder) throws InitializationError{
-		Class<?>[] singleton = {clazz};
-		TestClass testClass = new TestClass(clazz);
-		List<RecurringTest> runners = new ArrayList<RecurringTest>();
-		List<FrameworkMethod> methods = testClass.getAnnotatedMethods(Test.class);
-		for(FrameworkMethod method : methods){
-			// baseRunner wordt aangepast in de constructor van FreqDistTest.
-			// Dit zou efficienter kunnen met een clone()
-			Runner baseRunner = super.getSuite(builder, singleton);
-			RecurringTest runner = new RecurringTest(clazz, method, baseRunner);
-			runners.add(runner);
-		}
-		overview.addChildren(runners);
+	protected void loadClass(OverviewRunner overview, Class<?> clazz, RunnerBuilder builder) {
+		Runner classRunner = builder.safeRunnerForClass(clazz);
+		addAtomsToOverview(classRunner.getDescription(), overview, classRunner);
+		
 	}
 	
+	private void addAtomsToOverview(Description description,
+			OverviewRunner overview, Runner baseRunner) {
+		if (description.isEmpty()) {
+			return;
+		} else if (description.isTest()) {
+			try {
+				overview.addChild(new RecurringTest(description.getTestClass(), description.getMethodName(), baseRunner));
+			} catch (Exception e) {
+				
+			}
+		} else if (description.isSuite()) {
+			for (Description d : description.getChildren()) {
+				addAtomsToOverview(d, overview, baseRunner);
+			}
+		}
+	}
+
 	/**
 	 * Verwijdert alle testen die afkomstig zijn van een gegeven testklasse en voegt ze opnieuw toe.
 	 * @param overview
