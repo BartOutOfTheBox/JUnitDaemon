@@ -13,16 +13,26 @@ import org.junit.runners.model.FrameworkMethod;
  * It contains a reference to the method it represents and the test 
  * class the method belongs to. 
  */
-public class RecurringTest extends Runner{
+public class RecurringTest extends Runner {
 
 	private final FrameworkMethod method;
 	private final Class<?> clazz;
-	private final Runner filteredRunner;
+	private Runner filteredRunner;
+	
+	public RecurringTest(Class<?> clazz, String method, Runner baseRunner) throws NoSuchMethodException, SecurityException {
+		FrameworkMethod fMethod = new FrameworkMethod(clazz.getMethod(method, new Class<?>[0]));
+		this.method = fMethod;
+		this.clazz = clazz;
+		calculateRunner(baseRunner);
+	}
 	
 	public RecurringTest(Class<?> clazz, FrameworkMethod method,Runner baseRunner){
 		this.method = method;
 		this.clazz = clazz;
-		
+		calculateRunner(baseRunner);
+	}
+
+	private void calculateRunner(Runner baseRunner) {
 		System.out.println("UnfilteredTests: " + baseRunner.getDescription().getDisplayName());
 		
 		Description descr = Description.createTestDescription(clazz, method.getName(), method.getAnnotations());

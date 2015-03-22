@@ -5,6 +5,9 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
+import java.util.Iterator;
+
+import kuleuven.groep9.Notifier;
 
 /**
  * This class represents the subject project which is to be automatically tested by the JUnitDaemon.
@@ -16,7 +19,7 @@ import java.nio.file.Path;
  * @author r0254751
  *
  */
-public class Project {
+public class Project extends Notifier<Project.Listener>{
 	private final Code testCode;
 	private final Code testedCode;
 	
@@ -41,7 +44,6 @@ public class Project {
 		this.testedCode = new Code(this, codebaseDir, codeDir, 1000L);
 		this.testCode = new Code(this, testCodebaseDir, testCodeDir, 1000L);
 		this.setNewClassLoader();
-		this.reload();
 	}
 	
 	public Code getTestCode() {
@@ -115,6 +117,12 @@ public class Project {
 	 * Let this project know you are loading new Code into it.
 	 */
 	void incNbLoaders() {
+		if (nbLoaders == 0) {
+			Iterator<Project.Listener> it = getListeners();
+			while (it.hasNext()) {
+				it.next().startedLoading();
+			}
+		}
 		this.nbLoaders++;
 	}
 	
@@ -123,6 +131,12 @@ public class Project {
 	 */
 	void decNbLoaders() {
 		this.nbLoaders--;
+		if (nbLoaders == 0) {
+			Iterator<Project.Listener> it = getListeners();
+			while (it.hasNext()) {
+				it.next().stoppedLoading();
+			}
+		}
 	}
 	
 	/**
@@ -131,5 +145,10 @@ public class Project {
 	 */
 	public boolean isLoaded() {
 		return (nbLoaders == 0);
+	}
+
+	public interface Listener {
+		public void startedLoading();
+		public void stoppedLoading();
 	}
 }

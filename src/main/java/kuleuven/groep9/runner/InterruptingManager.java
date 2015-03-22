@@ -19,11 +19,6 @@ public class InterruptingManager extends AbstractExecutionManager{
 
 	@Override
 	public void startTestRun() {
-//		getNotifier().pleaseStop();
-		run(getNotifier());
+		(new AbstractExecutionManager.TestingThread()).run();
 	}
-
-	//TODO: usefull methods?
-//	getNotifier().pleaseStop();
-//	run(getNotifier());
 }

@@ -14,6 +14,7 @@ import org.junit.runner.notification.RunListener;
 import org.junit.runners.model.InitializationError;
 
 import kuleuven.groep9.classloading.Project;
+import kuleuven.groep9.runner.manipulation.CombinedSorter;
 import kuleuven.groep9.statistics.FrequencyStatistic;
 import kuleuven.groep9.statistics.LastFailStatistic;
 import kuleuven.groep9.statistics.StatisticTracker;
@@ -73,11 +74,10 @@ public class JUnitDaemon {
 			sorters[2] = testGroupTracker.getSorter();
 			int[] weights = {Integer.valueOf(args[3]),Integer.valueOf(args[4]),Integer.valueOf(args[5])};
 			
-			manager.setSorters(sorters, weights);
+			manager.setSorter(new CombinedSorter(sorters));
 		}
 		
 		RunListener listener = new TextListener(new RealSystem());
-        manager.getNotifier().addFirstListener(listener);
-        manager.run(manager.getNotifier());
+        manager.getCore().addListener(listener);
 	}
 }
