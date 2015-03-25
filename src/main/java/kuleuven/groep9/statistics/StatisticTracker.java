@@ -32,7 +32,6 @@ public class StatisticTracker<T extends Statistic> extends RunListener{
 	public void testStarted(Description descr) throws Exception {
 		updateDescription(descr);
 		getStatistic(descr).testStarted();
-		System.out.println("test started: " + descr.getMethodName());
 	}
 	
 	@Override
@@ -43,7 +42,6 @@ public class StatisticTracker<T extends Statistic> extends RunListener{
 	@Override
 	public void testFinished(Description descr) {
 		getStatistic(descr).testFinished();
-		System.out.println("test finished: " + descr.getMethodName());
 	}
 
 	protected Map<Description,T> getMap() {
