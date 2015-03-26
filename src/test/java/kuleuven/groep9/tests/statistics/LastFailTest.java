@@ -1,6 +1,7 @@
 package kuleuven.groep9.tests.statistics;
 
 import static org.junit.Assert.*;
+
 import kuleuven.groep9.statistics.LastFailStatistic;
 import kuleuven.groep9.statistics.StatisticTracker;
 
