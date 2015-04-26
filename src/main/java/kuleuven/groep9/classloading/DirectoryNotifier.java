@@ -19,7 +19,6 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
-import kuleuven.groep9.Notifier;
 import kuleuven.groep9.taskqueues.TaskQueue;
 import kuleuven.groep9.taskqueues.TimedTask;
 import kuleuven.groep9.taskqueues.Worker;

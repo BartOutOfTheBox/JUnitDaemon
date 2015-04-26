@@ -1,4 +1,4 @@
-package kuleuven.groep9;
+package kuleuven.groep9.classloading;
 
 import java.util.ArrayList;
 import java.util.Collections;

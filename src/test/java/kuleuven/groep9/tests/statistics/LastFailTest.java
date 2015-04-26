@@ -3,7 +3,7 @@ package kuleuven.groep9.tests.statistics;
 import static org.junit.Assert.*;
 
 import kuleuven.groep9.statistics.LastFailStatistic;
-import kuleuven.groep9.statistics.StatisticTracker;
+import kuleuven.groep9.statistics.IStatisticTracker;
 
 import org.junit.Test;
 
@@ -29,7 +29,7 @@ public class LastFailTest extends StatisticTest {
 
 	@Override
 	protected void setupTracker() {
-		super.tracker = new StatisticTracker<LastFailStatistic>(new LastFailStatistic(null));
+		super.tracker = new IStatisticTracker<LastFailStatistic>(new LastFailStatistic(null));
 	}
 	
 }

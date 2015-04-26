@@ -7,8 +7,6 @@ import java.net.URLClassLoader;
 import java.nio.file.Path;
 import java.util.Iterator;
 
-import kuleuven.groep9.Notifier;
-
 /**
  * This class represents the subject project which is to be automatically tested by the JUnitDaemon.
  * It contains two parts of code: the test code, and the actual code (which is to be tested).

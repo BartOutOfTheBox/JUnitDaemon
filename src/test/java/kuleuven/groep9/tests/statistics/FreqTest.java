@@ -2,7 +2,7 @@ package kuleuven.groep9.tests.statistics;
 
 import static org.junit.Assert.*;
 import kuleuven.groep9.statistics.FrequencyStatistic;
-import kuleuven.groep9.statistics.StatisticTracker;
+import kuleuven.groep9.statistics.IStatisticTracker;
 
 import org.junit.Test;
 
@@ -42,6 +42,6 @@ public class FreqTest extends StatisticTest {
 
 	@Override
 	protected void setupTracker() {
-		super.tracker = new StatisticTracker<FrequencyStatistic>(new FrequencyStatistic(null, 20));
+		super.tracker = new IStatisticTracker<FrequencyStatistic>(new FrequencyStatistic(null, 20));
 	}
 }

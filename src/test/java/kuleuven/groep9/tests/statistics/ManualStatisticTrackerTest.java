@@ -1,7 +1,7 @@
 package kuleuven.groep9.tests.statistics;
 
 import kuleuven.groep9.statistics.LastFailStatistic;
-import kuleuven.groep9.statistics.StatisticTracker;
+import kuleuven.groep9.statistics.IStatisticTracker;
 
 import org.junit.internal.RealSystem;
 import org.junit.internal.TextListener;
@@ -10,7 +10,7 @@ import org.junit.runner.JUnitCore;
 public class ManualStatisticTrackerTest {
 
 	private JUnitCore core;
-	private StatisticTracker<LastFailStatistic> tracker;
+	private IStatisticTracker<LastFailStatistic> tracker;
 	
 	private static Class<?> clazz;
 	
@@ -25,7 +25,7 @@ public class ManualStatisticTrackerTest {
 	
 	private ManualStatisticTrackerTest() {
 		core = new JUnitCore();
-		tracker = new StatisticTracker<LastFailStatistic>(new LastFailStatistic(null));
+		tracker = new IStatisticTracker<LastFailStatistic>(new LastFailStatistic(null));
 		core.addListener(tracker);
 		core.addListener(new TextListener(new RealSystem()));
 		core.run(new Class<?>[] {clazz});

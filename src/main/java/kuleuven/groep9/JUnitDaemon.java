@@ -1,7 +1,7 @@
 /**
  * 
  */
-package kuleuven.groep9.runner;
+package kuleuven.groep9;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -14,9 +14,11 @@ import org.junit.runner.notification.RunListener;
 import org.junit.runners.model.InitializationError;
 
 import kuleuven.groep9.classloading.Project;
+import kuleuven.groep9.runner.InterruptingManager;
 import kuleuven.groep9.runner.manipulation.CombinedSorter;
 import kuleuven.groep9.statistics.FrequencyStatistic;
 import kuleuven.groep9.statistics.LastFailStatistic;
+import kuleuven.groep9.statistics.IStatisticTracker;
 import kuleuven.groep9.statistics.StatisticTracker;
 import kuleuven.groep9.statistics.TestGroupManager;
 import kuleuven.groep9.statistics.TestGroupStatistic;
@@ -57,11 +59,11 @@ public class JUnitDaemon {
 		InterruptingManager manager = new InterruptingManager(project);
 		
 		StatisticTracker<LastFailStatistic> lastFailTracker = 
-				new StatisticTracker<LastFailStatistic>(new LastFailStatistic(null));
+				new IStatisticTracker<LastFailStatistic>(new LastFailStatistic(null));
 		StatisticTracker<FrequencyStatistic> frequencyTracker = 
-				new StatisticTracker<FrequencyStatistic>(new FrequencyStatistic(null, 20));
+				new IStatisticTracker<FrequencyStatistic>(new FrequencyStatistic(null, 20));
 		StatisticTracker<TestGroupStatistic> testGroupTracker = 
-				new StatisticTracker<TestGroupStatistic>(new TestGroupStatistic(null, new TestGroupManager()));
+				new IStatisticTracker<TestGroupStatistic>(new TestGroupStatistic(null, new TestGroupManager()));
 		
 		manager.addTracker(lastFailTracker);
 		manager.addTracker(frequencyTracker);
