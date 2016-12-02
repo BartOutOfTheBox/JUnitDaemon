@@ -12,12 +12,11 @@ import java.nio.file.attribute.BasicFileAttributes;
 import kuleuven.groep9.classloading.DirectoryNotifier;
 import kuleuven.groep9.classloading.DirectoryNotifier.Listener;
 
-public class ManualDirectoryNotifierTest {
-	public static void main(String... args) {
-		new ManualDirectoryNotifierTest();
-	}
+public 	abstract class ManualDirectoryNotifierTest {
+	private Path tmpPath;
+	private DirectoryNotifier notifier;
 	
-	public ManualDirectoryNotifierTest() {
+	protected ManualDirectoryNotifierTest() {
 		try {
 			setupPath();
 			setupNotifier();
@@ -27,14 +26,40 @@ public class ManualDirectoryNotifierTest {
 		}
 	}
 	
-	private Path tmpPath;
-	private DirectoryNotifier notifier;
 	
 	private void setupPath() throws IOException {
 		tmpPath = Files.createTempDirectory("JUnitDaemonDirNotifierTest");
 		System.out.println("Created new test directory: " + tmpPath.toString());
 	}
 	
+	private void setupNotifier() {
+		try {
+			notifier = new DirectoryNotifier(tmpPath, 200L);
+			notifier.addListener(new Listener() {
+					
+					@Override
+					public void fileModified(Path absoluteDir) {
+						System.out.println("\"" + absoluteDir.toString() + "\" has been modified.");
+					}
+					
+					@Override
+					public void fileDeleted(Path absoluteDir) {
+						System.out.println("\"" + absoluteDir.toString() + "\" has been deleted.");
+					}
+					
+					@Override
+					public void fileAdded(Path absoluteDir) {
+						System.out.println("\"" + absoluteDir.toString() + "\" has been added.");					
+					}
+				});
+			System.out.println("listening to: " + tmpPath.toString());
+			
+		} catch (IOException e) {
+			System.out.println("The path you tried to specify was illegal.");
+		}
+	}
+
+
 	private void removeTmpFiles() throws IOException {
 		Files.walkFileTree(tmpPath, new SimpleFileVisitor<Path>()
 		{
@@ -71,8 +96,7 @@ public class ManualDirectoryNotifierTest {
 		});
 	}
 	
-	@SuppressWarnings("unused")
-	private void breakdownPath() throws IOException {
+	protected void breakdownPath() throws IOException {
 		removeTmpFiles();
 		try {
 			Files.delete(tmpPath);
@@ -81,33 +105,6 @@ public class ManualDirectoryNotifierTest {
 			e.printStackTrace();
 		} catch (DirectoryNotEmptyException e) {
 			e.printStackTrace();
-		}
-	}
-	
-	private void setupNotifier() {
-		try {
-			notifier = new DirectoryNotifier(tmpPath, 200L);
-			notifier.addListener(new Listener() {
-					
-					@Override
-					public void fileModified(Path absoluteDir) {
-						System.out.println("\"" + absoluteDir.toString() + "\" has been modified.");
-					}
-					
-					@Override
-					public void fileDeleted(Path absoluteDir) {
-						System.out.println("\"" + absoluteDir.toString() + "\" has been deleted.");
-					}
-					
-					@Override
-					public void fileAdded(Path absoluteDir) {
-						System.out.println("\"" + absoluteDir.toString() + "\" has been added.");					
-					}
-				});
-			System.out.println("listening to: " + tmpPath.toString());
-			
-		} catch (IOException e) {
-			System.out.println("The path you tried to specify was illegal.");
 		}
 	}
 }
